@@ -1,0 +1,91 @@
+/**
+ * 订阅管理器
+ * 负责管理 MQTT 主题订阅
+ * 
+ * 版本: 1.1.0
+ * 更新: 2024-04-11
+ * 说明: 使用双数据结构（Map + Array）避免 Map 遍历的编译问题
+ */
+
+import { QoS } from '../interface.uts'
+
+/**
+ * 订阅信息
+ */
+export type Subscription = {
+  topic: string
+  qos: QoS
+  subscribedAt: number
+}
+
+/**
+ * 订阅管理器类
+ */
+export class SubscriptionManager {
+  private subscriptions: Map<string, Subscription> = new Map()
+  private subscriptionList: Subscription[] = []  // 同时维护一个数组
+  
+  /**
+   * 添加订阅
+   */
+  addSubscription(topic: string, qos: QoS): void {
+    const subscription: Subscription = {
+      topic: topic,
+      qos: qos,
+      subscribedAt: Date.now()
+    }
+    this.subscriptions.set(topic, subscription)
+    // 同时添加到数组
+    this.subscriptionList.push(subscription)
+  }
+  
+  /**
+   * 移除订阅
+   */
+  removeSubscription(topic: string): void {
+    this.subscriptions.delete(topic)
+    // 从数组中移除
+    const index = this.subscriptionList.findIndex((sub) => sub.topic === topic)
+    if (index > -1) {
+      this.subscriptionList.splice(index, 1)
+    }
+  }
+  
+  /**
+   * 检查是否已订阅
+   */
+  hasSubscription(topic: string): boolean {
+    return this.subscriptions.has(topic)
+  }
+  
+  /**
+   * 获取订阅信息
+   */
+  getSubscription(topic: string): Subscription | null {
+    const sub = this.subscriptions.get(topic)
+    return sub != null ? sub : null
+  }
+  
+  /**
+   * 获取所有订阅
+   */
+  getSubscriptions(): Subscription[] {
+    // 直接返回数组的副本
+    return this.subscriptionList.slice()
+  }
+  
+  /**
+   * 清空所有订阅
+   */
+  clearSubscriptions(): void {
+    this.subscriptions.clear()
+    this.subscriptionList = []
+  }
+  
+  /**
+   * 获取订阅数量
+   */
+  getSubscriptionCount(): number {
+    return this.subscriptions.size
+  }
+}

@@ -1,0 +1,160 @@
+/**
+ * 消息处理器
+ * 负责消息队列和批量处理
+ */
+
+import { QoS } from '../interface.uts'
+
+/**
+ * 待发送消息
+ */
+export type PendingMessage = {
+  id: string
+  topic: string
+  payload: string | ArrayBuffer
+  qos: QoS
+  retain: boolean
+  timestamp: number
+  retryCount: number
+}
+
+/**
+ * 接收到的消息
+ */
+export type ReceivedMessage = {
+  topic: string
+  payload: string | ArrayBuffer
+  qos: QoS
+  retain: boolean
+  timestamp: number
+}
+
+/**
+ * 消息处理器类
+ */
+export class MessageHandler {
+  private messageQueue: PendingMessage[] = []
+  private receivedQueue: ReceivedMessage[] = []
+  private maxQueueSize: number = 1000
+  private messageIdCounter: number = 0
+  
+  /**
+   * 生成消息 ID
+   */
+  private generateMessageId(): string {
+    this.messageIdCounter++
+    return 'msg_' + this.messageIdCounter + '_' + Date.now()
+  }
+  
+  /**
+   * 将消息加入发送队列
+   */
+  queueMessage(
+    topic: string,
+    payload: string | ArrayBuffer,
+    qos: QoS,
+    retain: boolean
+  ): PendingMessage {
+    const message: PendingMessage = {
+      id: this.generateMessageId(),
+      topic: topic,
+      payload: payload,
+      qos: qos,
+      retain: retain,
+      timestamp: Date.now(),
+      retryCount: 0
+    }
+    
+    // 检查队列大小限制
+    if (this.messageQueue.length >= this.maxQueueSize) {
+      // 移除最旧的消息
+      this.messageQueue.shift()
+    }
+    
+    this.messageQueue.push(message)
+    return message
+  }
+  
+  /**
+   * 从队列中移除消息
+   */
+  removeMessage(messageId: string): void {
+    const index = this.messageQueue.findIndex((msg) => msg.id === messageId)
+    if (index > -1) {
+      this.messageQueue.splice(index, 1)
+    }
+  }
+  
+  /**
+   * 获取待发送消息队列
+   */
+  getPendingMessages(): PendingMessage[] {
+    return this.messageQueue
+  }
+  
+  /**
+   * 清空发送队列
+   */
+  clearPendingMessages(): void {
+    this.messageQueue = []
+  }
+  
+  /**
+   * 处理接收到的消息
+   */
+  handleIncomingMessage(
+    topic: string,
+    payload: string | ArrayBuffer,
+    qos: QoS,
+    retain: boolean
+  ): ReceivedMessage {
+    const message: ReceivedMessage = {
+      topic: topic,
+      payload: payload,
+      qos: qos,
+      retain: retain,
+      timestamp: Date.now()
+    }
+    
+    // 检查队列大小限制
+    if (this.receivedQueue.length >= this.maxQueueSize) {
+      // 移除最旧的消息
+      this.receivedQueue.shift()
+    }
+    
+    this.receivedQueue.push(message)
+    return message
+  }
+  
+  /**
+   * 获取接收消息队列
+   */
+  getReceivedMessages(): ReceivedMessage[] {
+    return this.receivedQueue
+  }
+  
+  /**
+   * 清空接收队列
+   */
+  clearReceivedMessages(): void {
+    this.receivedQueue = []
+  }
+  
+  /**
+   * 设置最大队列大小
+   */
+  setMaxQueueSize(size: number): void {
+    this.maxQueueSize = size
+  }
+  
+  /**
+   * 获取队列统计信息
+   */
+  getQueueStats(): UTSJSONObject {
+    return {
+      pendingCount: this.messageQueue.length,
+      receivedCount: this.receivedQueue.length,
+      maxQueueSize: this.maxQueueSize
+    }
+  }
+}

@@ -16,6 +16,8 @@ import {
 
 import { UTSAndroid } from 'io.dcloud.uts'
 import MqttHelper from 'uni.changbi.mqtt.MqttHelper'
+import { SubscriptionManager } from '../common/SubscriptionManager.uts'
+import { MessageHandler } from '../common/MessageHandler.uts'
 
 /**
  * 全局变量
@@ -30,6 +32,10 @@ let connectionState: ConnectionState = {
   lastError: null
 }
 let logLevel: LogLevel = LogLevel.INFO
+
+// 订阅管理器和消息处理器
+let subscriptionManager: SubscriptionManager = new SubscriptionManager()
+let messageHandler: MessageHandler = new MessageHandler()
 
 // 保存回调函数引用，防止被释放
 let connectCallbackRef: ((sessionPresent: boolean, error: string | null) => void) | null = null
@@ -68,6 +74,9 @@ function initMqttHelper(): void {
       
       // 设置消息回调 - 保存到全局变量防止被释放
       messageCallbackRef = (topic: string, payload: string, qos: number, retain: boolean) => {
+        // 使用 MessageHandler 处理接收到的消息
+        messageHandler.handleIncomingMessage(topic, payload, qos as QoS, retain)
+        
         // 创建符合 EventData 类型的对象
         const eventData: EventData = {
           topic: topic,
@@ -181,6 +190,9 @@ export function disconnect(): Promise<void> {
       mqttHelper!.disconnect(
         () => {
           connectionState.status = 'disconnected'
+          // 清空订阅列表（clean session 时）
+          subscriptionManager.clearSubscriptions()
+          logMessage(LogLevel.INFO, 'Disconnected and cleared subscriptions')
           resolve()
         },
         (error: string) => {
@@ -220,11 +232,23 @@ export function subscribe(topic: string | string[], qos: QoS = 0): Promise<void>
       let hasError = false
       
       topics.forEach((t) => {
+        // 检查是否已订阅
+        if (subscriptionManager.hasSubscription(t)) {
+          logMessage(LogLevel.WARN, 'Already subscribed to ' + t)
+          completed++
+          if (completed === topics.length && !hasError) {
+            resolve()
+          }
+          return
+        }
+        
         mqttHelper!.subscribe(
           t,
           qos.toInt(),
           () => {
-            logMessage(LogLevel.INFO, 'Subscribed to ' + t)
+            // 添加到订阅管理器
+            subscriptionManager.addSubscription(t, qos)
+            logMessage(LogLevel.INFO, 'Subscribed to ' + t + ' with QoS ' + qos)
             completed++
             if (completed === topics.length && !hasError) {
               resolve()
@@ -261,9 +285,21 @@ export function unsubscribe(topic: string | string[]): Promise<void> {
       let hasError = false
       
       topics.forEach((t) => {
+        // 检查是否已订阅
+        if (!subscriptionManager.hasSubscription(t)) {
+          logMessage(LogLevel.WARN, 'Not subscribed to ' + t)
+          completed++
+          if (completed === topics.length && !hasError) {
+            resolve()
+          }
+          return
+        }
+        
         mqttHelper!.unsubscribe(
           t,
           () => {
+            // 从订阅管理器移除
+            subscriptionManager.removeSubscription(t)
             logMessage(LogLevel.INFO, 'Unsubscribed from ' + t)
             completed++
             if (completed === topics.length && !hasError) {
@@ -370,4 +406,47 @@ export function getConnectionState(): ConnectionState {
  */
 export function setLogLevel(level: LogLevel): void {
   logLevel = level
+}
+
+/**
+ * 获取所有订阅
+ */
+export function getSubscriptions(): any[] {
+  const subs = subscriptionManager.getSubscriptions()
+  // 转换为 any[] 类型
+  const result: any[] = []
+  for (let i = 0; i < subs.length; i++) {
+    result.push(subs[i])
+  }
+  return result
+}
+
+/**
+ * 获取订阅数量
+ */
+export function getSubscriptionCount(): number {
+  return subscriptionManager.getSubscriptionCount()
+}
+
+/**
+ * 检查是否已订阅某个主题
+ */
+export function hasSubscription(topic: string): boolean {
+  return subscriptionManager.hasSubscription(topic)
+}
+
+/**
+ * 获取消息队列统计信息
+ */
+export function getMessageQueueStats(): UTSJSONObject {
+  return messageHandler.getQueueStats()
+}
+
+/**
+ * 清空消息队列
+ */
+export function clearMessageQueues(): void {
+  messageHandler.clearPendingMessages()
+  messageHandler.clearReceivedMessages()
+  logMessage(LogLevel.INFO, 'Message queues cleared')
 }
