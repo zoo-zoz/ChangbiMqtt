@@ -1,0 +1,82 @@
+/**
+ * MQTT UTS 插件接口定义
+ */
+
+// QoS 服务质量等级
+export type QoS = 0 | 1 | 2
+
+// 日志级别
+export enum LogLevel {
+  DEBUG = 0,
+  INFO = 1,
+  WARN = 2,
+  ERROR = 3,
+  NONE = 4
+}
+
+// MQTT 事件类型
+export type MQTTEvent = 'connect' | 'reconnect' | 'disconnect' | 'offline' | 'close' | 'error' | 'message'
+
+// Will 消息配置
+export type WillMessage = {
+  topic: string
+  payload: string
+  qos: QoS
+  retain: boolean
+}
+
+// 连接选项
+export type ConnectionOptions = {
+  url: string
+  clientId: string
+  username?: string | null
+  password?: string | null
+  clean?: boolean
+  connectTimeout?: number
+  keepalive?: number
+  reconnect?: boolean
+  reconnectPeriod?: number
+  maxReconnectAttempts?: number
+  ssl?: boolean
+  certPath?: string | null
+  allowUntrusted?: boolean
+  will?: WillMessage | null
+}
+
+// 发布选项
+export type PublishOptions = {
+  qos?: QoS
+  retain?: boolean
+}
+
+// 错误信息
+export type ErrorInfo = {
+  code: number
+  message: string
+  type: 'connection' | 'authentication' | 'network' | 'protocol' | 'unknown'
+  timestamp: number
+  details?: any | null
+}
+
+// 事件数据
+export type EventData = {
+  sessionPresent?: boolean
+  error?: ErrorInfo
+  topic?: string
+  payload?: string | ArrayBuffer
+  qos?: QoS
+  retain?: boolean
+  attempt?: number
+}
+
+// 事件回调函数类型
+export type EventCallback = (data: EventData) => void
+
+// 连接状态
+export type ConnectionState = {
+  status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'disconnecting'
+  connectedAt?: number | null
+  lastError?: ErrorInfo | null
+  reconnectAttempts: number
+  sessionPresent: boolean
+}

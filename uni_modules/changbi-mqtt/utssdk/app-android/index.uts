@@ -1,0 +1,359 @@
+/**
+ * MQTT UTS 插件 - Android 实现
+ * 使用 Kotlin 混编避免类型问题
+ */
+
+import { 
+  ConnectionOptions, 
+  PublishOptions, 
+  MQTTEvent, 
+  EventCallback, 
+  EventData,
+  ConnectionState, 
+  LogLevel, 
+  QoS
+} from '../interface.uts'
+
+import { UTSAndroid } from 'io.dcloud.uts'
+import MqttHelper from 'uni.changbi.mqtt.MqttHelper'
+
+/**
+ * 全局变量
+ */
+let mqttHelper: MqttHelper | null = null
+let eventListeners: Map<string, Array<EventCallback>> = new Map()
+let connectionState: ConnectionState = {
+  status: 'disconnected',
+  reconnectAttempts: 0,
+  sessionPresent: false,
+  connectedAt: null,
+  lastError: null
+}
+let logLevel: LogLevel = LogLevel.INFO
+
+/**
+ * 初始化 MQTT Helper
+ */
+function initMqttHelper(): void {
+  if (mqttHelper == null) {
+    const context = UTSAndroid.getAppContext()
+    if (context != null) {
+      mqttHelper = new MqttHelper(context)
+      
+      // 设置连接回调
+      mqttHelper!.setConnectCallback((sessionPresent: boolean, error: string | null) => {
+        if (error == null) {
+          connectionState.status = 'connected'
+          connectionState.connectedAt = Date.now()
+          connectionState.sessionPresent = sessionPresent
+          connectionState.reconnectAttempts = 0
+          
+          // 创建符合 EventData 类型的对象
+          const eventData: EventData = {
+            sessionPresent: sessionPresent
+          }
+          emitEvent('connect', eventData)
+          logMessage(LogLevel.INFO, 'Connected to MQTT broker')
+        }
+      })
+      
+      // 设置消息回调
+      mqttHelper!.setMessageCallback((topic: string, payload: string, qos: number, retain: boolean) => {
+        // 创建符合 EventData 类型的对象
+        const eventData: EventData = {
+          topic: topic,
+          payload: payload,
+          qos: qos as QoS,
+          retain: retain
+        }
+        emitEvent('message', eventData)
+        logMessage(LogLevel.DEBUG, 'Message received on topic ' + topic)
+      })
+      
+      // 设置关闭回调
+      mqttHelper!.setCloseCallback(() => {
+        connectionState.status = 'disconnected'
+        const eventData: EventData = {}
+        emitEvent('close', eventData)
+        logMessage(LogLevel.INFO, 'Connection closed')
+      })
+    }
+  }
+}
+
+/**
+ * 触发事件
+ */
+function emitEvent(event: string, data: EventData): void {
+  const listeners = eventListeners.get(event)
+  if (listeners != null) {
+    listeners.forEach((callback) => {
+      try {
+        callback(data)
+      } catch (e) {
+        console.error('Error in event handler for ' + event + ':', e)
+      }
+    })
+  }
+}
+
+/**
+ * 记录日志
+ */
+function logMessage(level: LogLevel, message: string): void {
+  if (level >= logLevel) {
+    console.log('[MQTT] ' + message)
+  }
+}
+
+/**
+ * 连接到 MQTT Broker
+ */
+export function connect(options: ConnectionOptions): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    try {
+      initMqttHelper()
+      
+      if (mqttHelper == null) {
+        reject(new Error('Failed to initialize MQTT helper'))
+        return
+      }
+      
+      connectionState.status = 'connecting'
+      logMessage(LogLevel.INFO, 'Connecting to ' + options.url + '...')
+      
+      const username = options.username != null ? options.username! : null
+      const password = options.password != null ? options.password! : null
+      const clean = options.clean != null ? options.clean : true
+      const timeout = options.connectTimeout != null ? options.connectTimeout : 30000
+      const keepalive = options.keepalive != null ? options.keepalive : 60
+      
+      mqttHelper!.connect(
+        options.url,
+        options.clientId,
+        username,
+        password,
+        clean,
+        timeout.toInt(),
+        keepalive.toInt(),
+        () => {
+          resolve()
+        },
+        (error: string) => {
+          connectionState.status = 'disconnected'
+          logMessage(LogLevel.ERROR, 'Connection failed: ' + error)
+          reject(new Error(error))
+        }
+      )
+      
+    } catch (e) {
+      connectionState.status = 'disconnected'
+      reject(new Error('Connection error: ' + e))
+    }
+  })
+}
+
+/**
+ * 断开 MQTT 连接
+ */
+export function disconnect(): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    try {
+      if (mqttHelper == null) {
+        resolve()
+        return
+      }
+      
+      connectionState.status = 'disconnecting'
+      logMessage(LogLevel.INFO, 'Disconnecting...')
+      
+      mqttHelper!.disconnect(
+        () => {
+          connectionState.status = 'disconnected'
+          resolve()
+        },
+        (error: string) => {
+          reject(new Error(error))
+        }
+      )
+      
+    } catch (e) {
+      reject(new Error('Disconnect error: ' + e))
+    }
+  })
+}
+
+/**
+ * 检查是否已连接
+ */
+export function isConnected(): boolean {
+  if (mqttHelper != null) {
+    return mqttHelper!.isConnected()
+  }
+  return false
+}
+
+/**
+ * 订阅主题
+ */
+export function subscribe(topic: string | string[], qos: QoS = 0): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    try {
+      if (mqttHelper == null) {
+        reject(new Error('Client not initialized'))
+        return
+      }
+      
+      const topics = Array.isArray(topic) ? topic : [topic]
+      let completed = 0
+      let hasError = false
+      
+      topics.forEach((t) => {
+        mqttHelper!.subscribe(
+          t,
+          qos.toInt(),
+          () => {
+            logMessage(LogLevel.INFO, 'Subscribed to ' + t)
+            completed++
+            if (completed === topics.length && !hasError) {
+              resolve()
+            }
+          },
+          (error: string) => {
+            if (!hasError) {
+              hasError = true
+              reject(new Error(error))
+            }
+          }
+        )
+      })
+      
+    } catch (e) {
+      reject(new Error('Subscribe error: ' + e))
+    }
+  })
+}
+
+/**
+ * 取消订阅主题
+ */
+export function unsubscribe(topic: string | string[]): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    try {
+      if (mqttHelper == null) {
+        reject(new Error('Client not initialized'))
+        return
+      }
+      
+      const topics = Array.isArray(topic) ? topic : [topic]
+      let completed = 0
+      let hasError = false
+      
+      topics.forEach((t) => {
+        mqttHelper!.unsubscribe(
+          t,
+          () => {
+            logMessage(LogLevel.INFO, 'Unsubscribed from ' + t)
+            completed++
+            if (completed === topics.length && !hasError) {
+              resolve()
+            }
+          },
+          (error: string) => {
+            if (!hasError) {
+              hasError = true
+              reject(new Error(error))
+            }
+          }
+        )
+      })
+      
+    } catch (e) {
+      reject(new Error('Unsubscribe error: ' + e))
+    }
+  })
+}
+
+/**
+ * 发布消息
+ */
+export function publish(topic: string, message: string | ArrayBuffer, options?: PublishOptions): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    try {
+      if (mqttHelper == null) {
+        reject(new Error('Client not initialized'))
+        return
+      }
+      
+      const qos = options?.qos != null ? options.qos : 0
+      const retain = options?.retain != null ? options.retain : false
+      
+      let payload: string
+      if (typeof message === 'string') {
+        payload = message
+      } else {
+        payload = message.toString()
+      }
+      
+      mqttHelper!.publish(
+        topic,
+        payload,
+        qos.toInt(),
+        retain,
+        () => {
+          logMessage(LogLevel.DEBUG, 'Published to ' + topic)
+          resolve()
+        },
+        (error: string) => {
+          reject(new Error(error))
+        }
+      )
+      
+    } catch (e) {
+      reject(new Error('Publish error: ' + e))
+    }
+  })
+}
+
+/**
+ * 注册事件监听器
+ */
+export function on(event: MQTTEvent, callback: EventCallback): void {
+  let listeners = eventListeners.get(event)
+  if (listeners == null) {
+    listeners = []
+    eventListeners.set(event, listeners)
+  }
+  listeners.push(callback)
+}
+
+/**
+ * 移除事件监听器
+ */
+export function off(event: MQTTEvent, callback?: EventCallback): void {
+  if (callback == null) {
+    eventListeners.delete(event)
+  } else {
+    const listeners = eventListeners.get(event)
+    if (listeners != null) {
+      const index = listeners.indexOf(callback)
+      if (index > -1) {
+        listeners.splice(index, 1)
+      }
+    }
+  }
+}
+
+/**
+ * 获取连接状态
+ */
+export function getConnectionState(): ConnectionState {
+  return connectionState
+}
+
+/**
+ * 设置日志级别
+ */
+export function setLogLevel(level: LogLevel): void {
+  logLevel = level
+}

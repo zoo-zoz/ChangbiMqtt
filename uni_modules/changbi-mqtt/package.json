@@ -1,0 +1,110 @@
+{
+  "id": "changbi-mqtt",
+  "displayName": "Changbi MQTT 插件",
+  "version": "1.0.0",
+  "description": "UniApp MQTT 客户端 UTS 插件，支持 Android 平台",
+  "keywords": [
+    "mqtt",
+    "uts",
+    "android",
+    "iot"
+],
+  "repository": "",
+  "engines": {
+    "HBuilderX": "^3.6.0",
+    "uni-app": "^4.41",
+    "uni-app-x": "^4.41"
+  },
+  "dcloudext": {
+    "type": "uts",
+    "sale": {
+      "regular": {
+        "price": "0.00"
+      },
+      "sourcecode": {
+        "price": "0.00"
+      }
+    },
+    "contact": {
+      "qq": "1506376126"
+    },
+    "declaration": {
+      "ads": "无",
+      "data": "插件不采集任何数据",
+      "permissions": "android.permission.INTERNET,android.permission.ACCESS_NETWORK_STATE,android.permission.WAKE_LOCK"
+    },
+    "npmurl": "",
+    "darkmode": "x",
+    "i18n": "x",
+    "widescreen": "x"
+  },
+  "uni_modules": {
+    "dependencies": [],
+    "encrypt": [],
+    "platforms": {
+      "cloud": {
+        "tcb": "x",
+        "aliyun": "x",
+        "alipay": "x"
+      },
+      "client": {
+        "uni-app": {
+          "vue": {
+            "vue2": "-",
+            "vue3": {
+                "extVersion": "1.0.0",
+                "minVersion": ""
+            }
+          },
+          "web": {
+            "safari": "-",
+            "chrome": "-"
+          },
+          "app": {
+            "vue": "-",
+            "nvue": "-",
+            "android": {
+                "extVersion": "1.0.0",
+                "minVersion": "21"
+            },
+            "ios": "x",
+            "harmony": "x"
+          },
+          "mp": {
+            "weixin": "-",
+            "alipay": "-",
+            "toutiao": "-",
+            "baidu": "-",
+            "kuaishou": "-",
+            "jd": "-",
+            "harmony": "-",
+            "qq": "-",
+            "lark": "-",
+            "xhs": "-"
+          },
+          "quickapp": {
+            "huawei": "-",
+            "union": "-"
+          }
+        },
+        "uni-app-x": {
+          "web": {
+            "safari": "-",
+            "chrome": "-"
+          },
+          "app": {
+            "android": {
+                "extVersion": "1.0.0",
+                "minVersion": "21"
+            },
+            "ios": "x",
+            "harmony": "x"
+          },
+          "mp": {
+            "weixin": "-"
+          }
+        }
+      }
+    }
+  }
+}
