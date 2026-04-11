@@ -31,6 +31,14 @@ let connectionState: ConnectionState = {
 }
 let logLevel: LogLevel = LogLevel.INFO
 
+// 保存回调函数引用，防止被释放
+let connectCallbackRef: ((sessionPresent: boolean, error: string | null) => void) | null = null
+let messageCallbackRef: ((topic: string, payload: string, qos: number, retain: boolean) => void) | null = null
+let closeCallbackRef: (() => void) | null = null
+
+// 保存用户注册的事件回调，防止被释放
+let userEventCallbacks: Map<string, Array<EventCallback>> = new Map()
+
 /**
  * 初始化 MQTT Helper
  */
@@ -40,8 +48,8 @@ function initMqttHelper(): void {
     if (context != null) {
       mqttHelper = new MqttHelper(context)
       
-      // 设置连接回调
-      mqttHelper!.setConnectCallback((sessionPresent: boolean, error: string | null) => {
+      // 设置连接回调 - 保存到全局变量防止被释放
+      connectCallbackRef = (sessionPresent: boolean, error: string | null) => {
         if (error == null) {
           connectionState.status = 'connected'
           connectionState.connectedAt = Date.now()
@@ -55,10 +63,11 @@ function initMqttHelper(): void {
           emitEvent('connect', eventData)
           logMessage(LogLevel.INFO, 'Connected to MQTT broker')
         }
-      })
+      }
+      mqttHelper!.setConnectCallback(connectCallbackRef!)
       
-      // 设置消息回调
-      mqttHelper!.setMessageCallback((topic: string, payload: string, qos: number, retain: boolean) => {
+      // 设置消息回调 - 保存到全局变量防止被释放
+      messageCallbackRef = (topic: string, payload: string, qos: number, retain: boolean) => {
         // 创建符合 EventData 类型的对象
         const eventData: EventData = {
           topic: topic,
@@ -68,15 +77,17 @@ function initMqttHelper(): void {
         }
         emitEvent('message', eventData)
         logMessage(LogLevel.DEBUG, 'Message received on topic ' + topic)
-      })
+      }
+      mqttHelper!.setMessageCallback(messageCallbackRef!)
       
-      // 设置关闭回调
-      mqttHelper!.setCloseCallback(() => {
+      // 设置关闭回调 - 保存到全局变量防止被释放
+      closeCallbackRef = () => {
         connectionState.status = 'disconnected'
         const eventData: EventData = {}
         emitEvent('close', eventData)
         logMessage(LogLevel.INFO, 'Connection closed')
-      })
+      }
+      mqttHelper!.setCloseCallback(closeCallbackRef!)
     }
   }
 }
@@ -85,7 +96,7 @@ function initMqttHelper(): void {
  * 触发事件
  */
 function emitEvent(event: string, data: EventData): void {
-  const listeners = eventListeners.get(event)
+  const listeners = userEventCallbacks.get(event)
   if (listeners != null) {
     listeners.forEach((callback) => {
       try {
@@ -317,12 +328,15 @@ export function publish(topic: string, message: string | ArrayBuffer, options?: 
 
 /**
  * 注册事件监听器
+ * 使用 @UTSJS.keepAlive 装饰器，使回调函数可以持续触发
  */
+@UTSJS.keepAlive
 export function on(event: MQTTEvent, callback: EventCallback): void {
-  let listeners = eventListeners.get(event)
+  // 保存到专门的全局变量中，防止回调被释放
+  let listeners = userEventCallbacks.get(event)
   if (listeners == null) {
     listeners = []
-    eventListeners.set(event, listeners)
+    userEventCallbacks.set(event, listeners)
   }
   listeners.push(callback)
 }
@@ -332,9 +346,9 @@ export function on(event: MQTTEvent, callback: EventCallback): void {
  */
 export function off(event: MQTTEvent, callback?: EventCallback): void {
   if (callback == null) {
-    eventListeners.delete(event)
+    userEventCallbacks.delete(event)
   } else {
-    const listeners = eventListeners.get(event)
+    const listeners = userEventCallbacks.get(event)
     if (listeners != null) {
       const index = listeners.indexOf(callback)
       if (index > -1) {

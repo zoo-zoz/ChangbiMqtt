@@ -1,15 +1,15 @@
 {
   "id": "changbi-mqtt",
   "displayName": "Changbi MQTT 插件",
-  "version": "1.0.0",
-  "description": "UniApp MQTT 客户端 UTS 插件，支持 Android 平台",
+  "version": "1.0.2",
+  "description": "UniApp MQTT 客户端 UTS 插件，支持 Android 平台（仅供技术交流）",
   "keywords": [
     "mqtt",
     "uts",
     "android",
     "iot"
 ],
-  "repository": "",
+  "repository": "https://github.com/zoo-zoz/ChangbiMqtt.git",
   "engines": {
     "HBuilderX": "^3.6.0",
     "uni-app": "^4.41",
@@ -52,7 +52,7 @@
           "vue": {
             "vue2": "-",
             "vue3": {
-                "extVersion": "1.0.0",
+                "extVersion": "1.0.2",
                 "minVersion": ""
             }
           },
@@ -64,7 +64,7 @@
             "vue": "-",
             "nvue": "-",
             "android": {
-                "extVersion": "1.0.0",
+                "extVersion": "1.0.2",
                 "minVersion": "21"
             },
             "ios": "x",
@@ -94,7 +94,7 @@
           },
           "app": {
             "android": {
-                "extVersion": "1.0.0",
+                "extVersion": "1.0.2",
                 "minVersion": "21"
             },
             "ios": "x",

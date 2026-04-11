@@ -130,6 +130,21 @@ class MqttHelper(private val context: Context) {
     }
     
     /**
+     * 清理资源
+     */
+    fun cleanup() {
+        try {
+            if (mqttClient?.isConnected == true) {
+                mqttClient?.disconnect()
+            }
+            mqttClient?.close()
+            mqttClient = null
+        } catch (e: Exception) {
+            // 忽略清理错误
+        }
+    }
+    
+    /**
      * 检查是否已连接
      */
     fun isConnected(): Boolean {
