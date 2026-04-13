@@ -1,8 +1,13 @@
 {
   "dependencies": [
     "org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5",
+    "org.eclipse.paho:org.eclipse.paho.android.service:1.1.1",
     "androidx.legacy:legacy-support-v4:1.0.0"
   ],
+  "compileOptions": {
+    "sourceCompatibility": "1.8",
+    "targetCompatibility": "1.8"
+  },
   "minSdkVersion": "21",
   "permissions": [
     "android.permission.INTERNET",

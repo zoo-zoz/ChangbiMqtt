@@ -18,29 +18,27 @@ import { UTSAndroid } from 'io.dcloud.uts'
 import MqttHelper from 'uni.changbi.mqtt.MqttHelper'
 import { SubscriptionManager } from '../common/SubscriptionManager.uts'
 import { MessageHandler } from '../common/MessageHandler.uts'
+import { StateManager, ConnectionStatus } from '../common/StateManager.uts'
+import { ConnectionManager, ReconnectConfig } from '../common/ConnectionManager.uts'
 
 /**
  * 全局变量
  */
 let mqttHelper: MqttHelper | null = null
 let eventListeners: Map<string, Array<EventCallback>> = new Map()
-let connectionState: ConnectionState = {
-  status: 'disconnected',
-  reconnectAttempts: 0,
-  sessionPresent: false,
-  connectedAt: null,
-  lastError: null
-}
 let logLevel: LogLevel = LogLevel.INFO
 
-// 订阅管理器和消息处理器
+// 订阅管理器、消息处理器、状态管理器和连接管理器
 let subscriptionManager: SubscriptionManager = new SubscriptionManager()
 let messageHandler: MessageHandler = new MessageHandler()
+let stateManager: StateManager = new StateManager()
+let connectionManager: ConnectionManager = new ConnectionManager()
 
 // 保存回调函数引用，防止被释放
 let connectCallbackRef: ((sessionPresent: boolean, error: string | null) => void) | null = null
 let messageCallbackRef: ((topic: string, payload: string, qos: number, retain: boolean) => void) | null = null
 let closeCallbackRef: (() => void) | null = null
+let connectionLostCallbackRef: (() => void) | null = null
 
 // 保存用户注册的事件回调，防止被释放
 let userEventCallbacks: Map<string, Array<EventCallback>> = new Map()
@@ -54,19 +52,73 @@ function initMqttHelper(): void {
     if (context != null) {
       mqttHelper = new MqttHelper(context)
       
+      // 设置状态变化回调
+      stateManager.setStateChangeCallback((state) => {
+        // 根据状态触发相应事件
+        if (state.status === ConnectionStatus.CONNECTED) {
+          const eventData: EventData = {
+            sessionPresent: state.sessionPresent
+          }
+          emitEvent('connect', eventData)
+        } else if (state.status === ConnectionStatus.DISCONNECTED) {
+          const eventData: EventData = {}
+          emitEvent('close', eventData)
+          if (state.lastError !== null) {
+            const errorData: EventData = {
+              error: state.lastError
+            }
+            emitEvent('offline', errorData)
+          }
+        } else if (state.status === ConnectionStatus.RECONNECTING) {
+          const eventData: EventData = {
+            reconnectAttempts: state.reconnectAttempts
+          }
+          emitEvent('reconnect', eventData)
+        }
+      })
+      
+      // 设置重连回调
+      connectionManager.setReconnectCallback(() => {
+        const options = connectionManager.getConnectionOptions()
+        if (options !== null) {
+          const attempts = stateManager.incrementReconnectAttempts()
+          stateManager.setReconnecting(attempts)
+          logMessage(LogLevel.INFO, 'Reconnecting... (attempt ' + attempts + ')')
+          
+          // 尝试重连
+          connect(options).then(() => {
+            connectionManager.onReconnectSuccess()
+            stateManager.resetReconnectAttempts()
+            
+            // 恢复订阅
+            const subscriptions = subscriptionManager.getSubscriptions()
+            subscriptions.forEach((sub) => {
+              subscribe(sub.topic, sub.qos).catch((e) => {
+                const errMsg = e != null ? (e as Error).message : 'Unknown error'
+                logMessage(LogLevel.ERROR, 'Failed to restore subscription: ' + errMsg)
+              })
+            })
+          }).catch((e) => {
+            connectionManager.onReconnectFailure()
+            const errMsg = e != null ? (e as Error).message : 'Unknown error'
+            logMessage(LogLevel.ERROR, 'Reconnect failed: ' + errMsg)
+          })
+        }
+      })
+      
+      // 设置达到最大重连次数回调
+      connectionManager.setMaxAttemptsCallback(() => {
+        logMessage(LogLevel.ERROR, 'Max reconnect attempts reached')
+        const eventData: EventData = {
+          error: 'Max reconnect attempts reached'
+        }
+        emitEvent('offline', eventData)
+      })
+      
       // 设置连接回调 - 保存到全局变量防止被释放
       connectCallbackRef = (sessionPresent: boolean, error: string | null) => {
         if (error == null) {
-          connectionState.status = 'connected'
-          connectionState.connectedAt = Date.now()
-          connectionState.sessionPresent = sessionPresent
-          connectionState.reconnectAttempts = 0
-          
-          // 创建符合 EventData 类型的对象
-          const eventData: EventData = {
-            sessionPresent: sessionPresent
-          }
-          emitEvent('connect', eventData)
+          stateManager.setConnected(sessionPresent)
           logMessage(LogLevel.INFO, 'Connected to MQTT broker')
         }
       }
@@ -91,12 +143,17 @@ function initMqttHelper(): void {
       
       // 设置关闭回调 - 保存到全局变量防止被释放
       closeCallbackRef = () => {
-        connectionState.status = 'disconnected'
-        const eventData: EventData = {}
-        emitEvent('close', eventData)
+        stateManager.setDisconnected()
         logMessage(LogLevel.INFO, 'Connection closed')
       }
       mqttHelper!.setCloseCallback(closeCallbackRef!)
+      
+      // 设置连接丢失回调 - 保存到全局变量防止被释放
+      connectionLostCallbackRef = () => {
+        logMessage(LogLevel.WARN, 'Connection lost, attempting to reconnect...')
+        connectionManager.handleConnectionLost()
+      }
+      mqttHelper!.setConnectionLostCallback(connectionLostCallbackRef!)
     }
   }
 }
@@ -139,7 +196,28 @@ export function connect(options: ConnectionOptions): Promise<void> {
         return
       }
       
-      connectionState.status = 'connecting'
+      // 保存连接选项用于重连
+      connectionManager.saveConnectionOptions(options)
+      
+      // 配置重连参数
+      if (options.reconnectPeriod != null) {
+        const config = {
+          enabled: true,
+          reconnectPeriod: options.reconnectPeriod,
+          maxReconnectAttempts: 10
+        } as ReconnectConfig
+        connectionManager.setReconnectConfig(config)
+      }
+      if (options.maxReconnectAttempts != null) {
+        const config = {
+          enabled: true,
+          reconnectPeriod: 5000,
+          maxReconnectAttempts: options.maxReconnectAttempts
+        } as ReconnectConfig
+        connectionManager.setReconnectConfig(config)
+      }
+      
+      stateManager.setConnecting()
       logMessage(LogLevel.INFO, 'Connecting to ' + options.url + '...')
       
       const username = options.username != null ? options.username! : null
@@ -160,15 +238,23 @@ export function connect(options: ConnectionOptions): Promise<void> {
           resolve()
         },
         (error: string) => {
-          connectionState.status = 'disconnected'
+          stateManager.setDisconnected(error)
           logMessage(LogLevel.ERROR, 'Connection failed: ' + error)
+          
+          // 触发错误事件
+          const errorData: EventData = {
+            error: error
+          }
+          emitEvent('error', errorData)
+          
           reject(new Error(error))
         }
       )
       
     } catch (e) {
-      connectionState.status = 'disconnected'
-      reject(new Error('Connection error: ' + e))
+      const errorMsg = 'Connection error: ' + e
+      stateManager.setDisconnected(errorMsg)
+      reject(new Error(errorMsg))
     }
   })
 }
@@ -184,24 +270,32 @@ export function disconnect(): Promise<void> {
         return
       }
       
-      connectionState.status = 'disconnecting'
+      // 取消重连
+      connectionManager.cancelReconnect()
+      
+      stateManager.setDisconnecting()
       logMessage(LogLevel.INFO, 'Disconnecting...')
       
       mqttHelper!.disconnect(
         () => {
-          connectionState.status = 'disconnected'
+          stateManager.setDisconnected()
           // 清空订阅列表（clean session 时）
           subscriptionManager.clearSubscriptions()
+          // 重置连接管理器
+          connectionManager.reset()
           logMessage(LogLevel.INFO, 'Disconnected and cleared subscriptions')
           resolve()
         },
         (error: string) => {
+          stateManager.setDisconnected(error)
           reject(new Error(error))
         }
       )
       
     } catch (e) {
-      reject(new Error('Disconnect error: ' + e))
+      const errorMsg = 'Disconnect error: ' + e
+      stateManager.setDisconnected(errorMsg)
+      reject(new Error(errorMsg))
     }
   })
 }
@@ -397,8 +491,16 @@ export function off(event: MQTTEvent, callback?: EventCallback): void {
 /**
  * 获取连接状态
  */
-export function getConnectionState(): ConnectionState {
-  return connectionState
+export function getConnectionState(): any {
+  const state = stateManager.getConnectionState()
+  // 转换为兼容的格式
+  return {
+    status: state.status.toString(),
+    connectedAt: state.connectedAt,
+    lastError: state.lastError,
+    reconnectAttempts: state.reconnectAttempts,
+    sessionPresent: state.sessionPresent
+  }
 }
 
 /**

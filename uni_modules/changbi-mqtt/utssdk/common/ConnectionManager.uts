@@ -1,0 +1,197 @@
+/**
+ * 连接管理器
+ * 管理 MQTT 连接的重连逻辑
+ */
+
+import { ConnectionOptions } from '../interface.uts'
+
+/**
+ * 重连配置类型
+ */
+export type ReconnectConfig = {
+  enabled: boolean
+  reconnectPeriod: number
+  maxReconnectAttempts: number
+}
+
+/**
+ * 连接管理器类
+ */
+export class ConnectionManager {
+  private reconnectConfig: ReconnectConfig = {
+    enabled: true,
+    reconnectPeriod: 5000,
+    maxReconnectAttempts: 10
+  } as ReconnectConfig
+  
+  private reconnectTimer: number | null = null
+  private reconnectAttempts: number = 0
+  private lastConnectionOptions: ConnectionOptions | null = null
+  private isReconnecting: boolean = false
+  
+  private reconnectCallback: (() => void) | null = null
+  private maxAttemptsCallback: (() => void) | null = null
+  
+  /**
+   * 设置重连配置
+   */
+  setReconnectConfig(config: ReconnectConfig): void {
+    if (config.enabled !== null) {
+      this.reconnectConfig.enabled = config.enabled
+    }
+    if (config.reconnectPeriod !== null) {
+      this.reconnectConfig.reconnectPeriod = config.reconnectPeriod
+    }
+    if (config.maxReconnectAttempts !== null) {
+      this.reconnectConfig.maxReconnectAttempts = config.maxReconnectAttempts
+    }
+  }
+  
+  /**
+   * 获取重连配置
+   */
+  getReconnectConfig(): ReconnectConfig {
+    return { ...this.reconnectConfig } as ReconnectConfig
+  }
+  
+  /**
+   * 设置重连回调
+   */
+  setReconnectCallback(callback: () => void): void {
+    this.reconnectCallback = callback
+  }
+  
+  /**
+   * 设置达到最大重连次数回调
+   */
+  setMaxAttemptsCallback(callback: () => void): void {
+    this.maxAttemptsCallback = callback
+  }
+  
+  /**
+   * 保存连接选项（用于重连）
+   */
+  saveConnectionOptions(options: ConnectionOptions): void {
+    this.lastConnectionOptions = options
+  }
+  
+  /**
+   * 获取保存的连接选项
+   */
+  getConnectionOptions(): ConnectionOptions | null {
+    return this.lastConnectionOptions
+  }
+  
+  /**
+   * 处理连接丢失
+   */
+  handleConnectionLost(): void {
+    if (!this.reconnectConfig.enabled) {
+      return
+    }
+    
+    if (this.isReconnecting) {
+      return
+    }
+    
+    if (this.reconnectAttempts >= this.reconnectConfig.maxReconnectAttempts) {
+      console.log('[ConnectionManager] Max reconnect attempts reached')
+      if (this.maxAttemptsCallback !== null) {
+        this.maxAttemptsCallback()
+      }
+      return
+    }
+    
+    this.isReconnecting = true
+    this.reconnectAttempts++
+    
+    console.log('[ConnectionManager] Scheduling reconnect attempt ' + this.reconnectAttempts + 
+                ' in ' + this.reconnectConfig.reconnectPeriod + 'ms')
+    
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnect()
+    }, this.reconnectConfig.reconnectPeriod)
+  }
+  
+  /**
+   * 执行重连
+   */
+  private reconnect(): void {
+    if (this.reconnectCallback !== null) {
+      console.log('[ConnectionManager] Attempting to reconnect...')
+      this.reconnectCallback()
+    }
+    this.isReconnecting = false
+  }
+  
+  /**
+   * 重连成功
+   */
+  onReconnectSuccess(): void {
+    console.log('[ConnectionManager] Reconnect successful')
+    this.reconnectAttempts = 0
+    this.isReconnecting = false
+    this.cancelReconnect()
+  }
+  
+  /**
+   * 重连失败
+   */
+  onReconnectFailure(): void {
+    console.log('[ConnectionManager] Reconnect failed')
+    this.isReconnecting = false
+    // 继续尝试重连
+    this.handleConnectionLost()
+  }
+  
+  /**
+   * 取消重连
+   */
+  cancelReconnect(): void {
+    const timer = this.reconnectTimer
+    if (timer !== null) {
+      clearTimeout(timer)
+      this.reconnectTimer = null
+    }
+    this.isReconnecting = false
+  }
+  
+  /**
+   * 重置重连状态
+   */
+  reset(): void {
+    this.cancelReconnect()
+    this.reconnectAttempts = 0
+    this.isReconnecting = false
+    this.lastConnectionOptions = null
+  }
+  
+  /**
+   * 获取当前重连次数
+   */
+  getReconnectAttempts(): number {
+    return this.reconnectAttempts
+  }
+  
+  /**
+   * 检查是否正在重连
+   */
+  isReconnectingNow(): boolean {
+    return this.isReconnecting
+  }
+  
+  /**
+   * 启用自动重连
+   */
+  enableReconnect(): void {
+    this.reconnectConfig.enabled = true
+  }
+  
+  /**
+   * 禁用自动重连
+   */
+  disableReconnect(): void {
+    this.reconnectConfig.enabled = false
+    this.cancelReconnect()
+  }
+}

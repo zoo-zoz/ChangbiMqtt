@@ -61,12 +61,13 @@ export type ErrorInfo = {
 // 事件数据
 export type EventData = {
   sessionPresent?: boolean
-  error?: ErrorInfo
+  error?: string | ErrorInfo
   topic?: string
   payload?: string | ArrayBuffer
   qos?: QoS
   retain?: boolean
   attempt?: number
+  reconnectAttempts?: number
 }
 
 // 事件回调函数类型

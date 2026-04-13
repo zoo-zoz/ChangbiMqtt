@@ -1,0 +1,224 @@
+/**
+ * 连接状态管理器
+ * 管理 MQTT 连接的状态转换和查询
+ */
+
+/**
+ * 连接状态枚举
+ */
+export enum ConnectionStatus {
+  DISCONNECTED = 'disconnected',
+  CONNECTING = 'connecting',
+  CONNECTED = 'connected',
+  RECONNECTING = 'reconnecting',
+  DISCONNECTING = 'disconnecting'
+}
+
+/**
+ * 连接状态类型
+ */
+export type ConnectionState = {
+  status: ConnectionStatus
+  connectedAt: number | null
+  lastError: string | null
+  reconnectAttempts: number
+  sessionPresent: boolean
+}
+
+/**
+ * 状态管理器类
+ */
+export class StateManager {
+  private state: ConnectionState = {
+    status: ConnectionStatus.DISCONNECTED,
+    connectedAt: null,
+    lastError: null,
+    reconnectAttempts: 0,
+    sessionPresent: false
+  } as ConnectionState
+  
+  private stateChangeCallback: ((state: ConnectionState) => void) | null = null
+  
+  /**
+   * 设置状态变化回调
+   */
+  setStateChangeCallback(callback: (state: ConnectionState) => void): void {
+    this.stateChangeCallback = callback
+  }
+  
+  /**
+   * 获取当前连接状态
+   */
+  getConnectionState(): ConnectionState {
+    return { ...this.state } as ConnectionState
+  }
+  
+  /**
+   * 检查是否已连接
+   */
+  isConnected(): boolean {
+    return this.state.status === ConnectionStatus.CONNECTED
+  }
+  
+  /**
+   * 检查是否正在连接
+   */
+  isConnecting(): boolean {
+    return this.state.status === ConnectionStatus.CONNECTING || 
+           this.state.status === ConnectionStatus.RECONNECTING
+  }
+  
+  /**
+   * 检查是否正在断开
+   */
+  isDisconnecting(): boolean {
+    return this.state.status === ConnectionStatus.DISCONNECTING
+  }
+  
+  /**
+   * 设置为连接中状态
+   */
+  setConnecting(): void {
+    const updates = {
+      'status': ConnectionStatus.CONNECTING,
+      'lastError': null
+    }
+    this.updateState(updates)
+  }
+  
+  /**
+   * 设置为已连接状态
+   */
+  setConnected(sessionPresent: boolean = false): void {
+    const updates = {
+      'status': ConnectionStatus.CONNECTED,
+      'connectedAt': Date.now(),
+      'lastError': null,
+      'reconnectAttempts': 0,
+      'sessionPresent': sessionPresent
+    }
+    this.updateState(updates)
+  }
+  
+  /**
+   * 设置为重连中状态
+   */
+  setReconnecting(attempts: number): void {
+    const updates = {
+      'status': ConnectionStatus.RECONNECTING,
+      'reconnectAttempts': attempts
+    }
+    this.updateState(updates)
+  }
+  
+  /**
+   * 设置为断开中状态
+   */
+  setDisconnecting(): void {
+    const updates = {
+      'status': ConnectionStatus.DISCONNECTING
+    }
+    this.updateState(updates)
+  }
+  
+  /**
+   * 设置为已断开状态
+   */
+  setDisconnected(error: string | null = null): void {
+    const updates = {
+      'status': ConnectionStatus.DISCONNECTED,
+      'connectedAt': null,
+      'lastError': error,
+      'sessionPresent': false
+    }
+    this.updateState(updates)
+  }
+  
+  /**
+   * 记录错误
+   */
+  setError(error: string): void {
+    const updates = {
+      'lastError': error
+    }
+    this.updateState(updates)
+  }
+  
+  /**
+   * 增加重连次数
+   */
+  incrementReconnectAttempts(): number {
+    const attempts = this.state.reconnectAttempts + 1
+    const updates = {
+      'reconnectAttempts': attempts
+    }
+    this.updateState(updates)
+    return attempts
+  }
+  
+  /**
+   * 重置重连次数
+   */
+  resetReconnectAttempts(): void {
+    const updates = {
+      'reconnectAttempts': 0
+    }
+    this.updateState(updates)
+  }
+  
+  /**
+   * 重置状态
+   */
+  reset(): void {
+    this.state = {
+      status: ConnectionStatus.DISCONNECTED,
+      connectedAt: null,
+      lastError: null,
+      reconnectAttempts: 0,
+      sessionPresent: false
+    } as ConnectionState
+    this.notifyStateChange()
+  }
+  
+  /**
+   * 更新状态
+   */
+  private updateState(updates: UTSJSONObject): void {
+    // 手动更新每个字段
+    const status = updates['status']
+    if (status !== null) {
+      this.state.status = status as ConnectionStatus
+    }
+    
+    const connectedAt = updates['connectedAt']
+    if (connectedAt !== null) {
+      this.state.connectedAt = connectedAt as number | null
+    }
+    
+    const lastError = updates['lastError']
+    if (lastError !== null) {
+      this.state.lastError = lastError as string | null
+    }
+    
+    const reconnectAttempts = updates['reconnectAttempts']
+    if (reconnectAttempts !== null) {
+      this.state.reconnectAttempts = reconnectAttempts as number
+    }
+    
+    const sessionPresent = updates['sessionPresent']
+    if (sessionPresent !== null) {
+      this.state.sessionPresent = sessionPresent as boolean
+    }
+    
+    this.notifyStateChange()
+  }
+  
+  /**
+   * 通知状态变化
+   */
+  private notifyStateChange(): void {
+    if (this.stateChangeCallback !== null) {
+      this.stateChangeCallback(this.getConnectionState())
+    }
+  }
+}
