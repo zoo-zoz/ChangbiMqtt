@@ -1,8 +1,8 @@
 {
   "id": "changbi-mqtt",
   "displayName": "Changbi MQTT 插件",
-  "version": "1.1.4",
-  "description": "UniApp MQTT 客户端 UTS 插件，支持 Android 平台（仅供技术交流）",
+  "version": "1.1.9",
+  "description": "UniApp MQTT 客户端 UTS 插件",
   "keywords": [
     "mqtt",
     "uts",
@@ -52,7 +52,7 @@
           "vue": {
             "vue2": "-",
             "vue3": {
-                "extVersion": "1.1.4",
+                "extVersion": "1.1.9",
                 "minVersion": ""
             }
           },
@@ -64,7 +64,7 @@
             "vue": "-",
             "nvue": "-",
             "android": {
-                "extVersion": "1.1.4",
+                "extVersion": "1.1.9",
                 "minVersion": "21"
             },
             "ios": "x",
@@ -94,7 +94,7 @@
           },
           "app": {
             "android": {
-                "extVersion": "1.1.4",
+                "extVersion": "1.1.9",
                 "minVersion": "21"
             },
             "ios": "x",

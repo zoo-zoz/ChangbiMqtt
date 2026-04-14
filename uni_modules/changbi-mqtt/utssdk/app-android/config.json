@@ -1,8 +1,9 @@
 {
   "dependencies": [
     "org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5",
-    "org.eclipse.paho:org.eclipse.paho.android.service:1.1.1",
-    "androidx.legacy:legacy-support-v4:1.0.0"
+    "io.github.muxiaolin:org.eclipse.paho.android.service:1.1.4",
+    "androidx.legacy:legacy-support-v4:1.0.0",
+    "androidx.work:work-runtime:2.9.1"
   ],
   "compileOptions": {
     "sourceCompatibility": "1.8",
@@ -12,6 +13,7 @@
   "permissions": [
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",
-    "android.permission.WAKE_LOCK"
+    "android.permission.WAKE_LOCK",
+    "android.permission.SCHEDULE_EXACT_ALARM"
   ]
 }

@@ -321,15 +321,8 @@ export default {
         this.connectionStatus = '已离线'
         const msg = data && data.error ? data.error : '达到最大重连次数'
         this.log('error', '❌ 已离线: ' + msg)
-        
         // 更新状态信息
-        this.updateConnectionState()
-        
-        uni.showModal({
-          title: '连接失败',
-          content: '无法连接到服务器，已达到最大重连次数',
-          showCancel: false
-        })
+        this.updateConnectionState()       
       })
       
       on('error', (data) => {
